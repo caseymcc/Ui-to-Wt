@@ -1,7 +1,7 @@
 This is a cmake module with python script to convert Qt Ui 
 files into a source file for compilation with Wt.
 
-copy the cmake UseUI and scrupt folder into your CMakeModules
+Copy the cmake UseUI and script folder into your CMakeModules
 directory.
 
 in your CMakeList.txt file add

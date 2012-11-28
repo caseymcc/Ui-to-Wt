@@ -87,8 +87,14 @@ class MiniDomHelper(object):
     def property(self, propertyName, default=None):
         nodes=self.findAll(tag='property', name=propertyName)
         if nodes:
-            return nodes[0].value();
+            return nodes[0].value()
         return default
+    
+    def hasProperty(self, propertyName):
+        nodes=self.findAll(tag='property', name=propertyName)
+        if nodes:
+            return True
+        return False
     
     def attribute(self, attributeName):
         if not self.node.hasAttribute(attributeName):
@@ -165,6 +171,13 @@ class UIXmlParser(object):
         self.tryFunctionCall(processFunction, node, localContext)
         self.pushChild(context, localContext)
 
+    def process_item(self, node, context):
+        if 'className' in context:
+            if context['className'] == 'Wt::WComboBox':
+                name=node.property('text')
+                if name:
+                    self.writeHeader("%s->addItem(\"%s\");"%(context['variableName'], name))
+                    
     def process_spacer(self, node, context):
         localContext={}
         localContext['className']='spacer'
@@ -257,7 +270,18 @@ class UIXmlParser(object):
                     self.writeHeader("%s->addTab(%s, \"%s\");"%(context['variableName'], child['variableName'], child['title']))
                     
     def process_widget_QTableView(self, node, context):
-        process_widget_QTableWidget(self, node, context)
+        self.setWtType("WTableView", context)
+        self.defineVariable(context)
+        self.process(node, context)
+        if 'minimumSize' in context and 'maximumSize' in context: #fixed size not in Qt Designer for QTableView force resize
+            minimumSize=context['minimumSize'];
+            maximumSize=context['maximumSize'];
+#            self.writeHeader("int %(var)sWidth=%(var)s->width().toPixels(); int %(var)sHeight=%(var)s->height().toPixels();"%{"var":context['variableName']})
+            if minimumSize.width == maximumSize.width:
+                self.writeHeader("%s->setWidth(%s);"%(context['variableName'], minimumSize.width))
+            if minimumSize.height == maximumSize.height:
+                self.writeHeader("%s->setHeight(%s);"%(context['variableName'], minimumSize.height))
+#            self.writeHeader("%(var)s->resize(Wt::WLength(%(var)sWidth), Wt::WLength(%(var)sHeight));"%{"var":context['variableName']})
         
     def process_widget_QTableWidget(self, node, context):
         self.setWtType("WTable", context)
@@ -288,9 +312,34 @@ class UIXmlParser(object):
         self.defineVariable(context)
         self.writeHeader('%s->setText("%s");'%(context['variableName'], node.property('text')))
         self.process(node, context)
+        
+    def process_widget_QLineEdit(self, node, context):
+        self.setWtType("WLineEdit", context)
+        self.defineVariable(context)
+        if node.property('text'):
+            self.writeHeader('%s->setText("%s");'%(context['variableName'], node.property('text')))
+        self.process(node, context)
     
+    def process_widget_QComboBox(self, node, context):
+        self.setWtType("WComboBox", context)
+        self.defineVariable(context)
+#        self.writeHeader('%s->setText("%s");'%(context['variableName'], node.property('text')))
+        self.process(node, context)
+        
     def process_widget_QPushButton(self, node, context):
         self.setWtType("WPushButton", context)
+        self.defineVariable(context)
+        self.writeHeader('%s->setText("%s");'%(context['variableName'], node.property('text')))
+        self.process(node, context)
+        
+    def process_widget_QRadioButton(self, node, context):
+        self.setWtType("WRadioButton", context)
+        self.defineVariable(context)
+        self.writeHeader('%s->setText("%s");'%(context['variableName'], node.property('text')))
+        self.process(node, context)
+    
+    def process_widget_QCheckBox(self, node, context):
+        self.setWtType("WCheckBox", context)
         self.defineVariable(context)
         self.writeHeader('%s->setText("%s");'%(context['variableName'], node.property('text')))
         self.process(node, context)
@@ -313,6 +362,7 @@ class UIXmlParser(object):
         size=node.find(tag='size')
         if size:
             self.writeHeader("%s->setMinimumSize(Wt::WLength(%s), Wt::WLength(%s));"%(context['variableName'], size.width, size.height))
+            context['minimumSize']=size
     
     def process_property_maximumSize(self, node, context):
         size=node.find(tag='size')
@@ -324,6 +374,7 @@ class UIXmlParser(object):
             if height == '16777215':
                 height='Wt::WLength::Auto'    
             self.writeHeader("%s->setMaximumSize(Wt::WLength(%s), Wt::WLength(%s));"%(context['variableName'], width, height))
+            context['maximumSize']=size
     
 #   def process_property_sizePolicy(self, node, context):
 #        sizePolicy=node.find(tag='sizepolicy')
