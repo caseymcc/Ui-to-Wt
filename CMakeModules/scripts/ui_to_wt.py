@@ -22,6 +22,16 @@ def camelCase(string):
         string[0]=string[0].lower()
     return ''.join(string)
 
+def find(func, seq):
+    for item in seq:
+        if func(item):
+            return item
+    
+def rfind(func, seq):
+    for item in reversed(seq):
+        if func(item):
+            return item
+    
 #MiniDomHelper - shortcuts for the minidom
 class MiniDomHelper(object):
     def __init__(self, node):
@@ -179,7 +189,9 @@ class UIXmlParser(object):
                     self.writeHeader("%s->addItem(\"%s\");"%(context['variableName'], name))
                     
     def process_spacer(self, node, context):
-        localContext={}
+#        localContext={}
+        localContext=context.copy()
+        self.pushParent(localContext)
         localContext['className']='spacer'
         localContext['name']=node.name()
         self.process(node, localContext)
@@ -220,6 +232,9 @@ class UIXmlParser(object):
         if 'variableName' in context:
             context['parentName']=context['variableName']
             context['parentClass']=context['className']
+            if 'parentList' not in context:
+                context['parentList']=list();
+            context['parentList'].append({'variableName':context['variableName'], 'className':context['className']})
         else:
             if 'parentName' in context:
                 del context['parentName']
@@ -229,8 +244,10 @@ class UIXmlParser(object):
             del context['variableName']
         if 'className' in context:
             del context['className']
-            
+        
     def pushChild(self, context, childContext):
+        if 'parentList' in context:
+            context['parentList'].pop()
         if 'className' in childContext:
             if 'children' not in context:
                 context['children']=list()
@@ -334,8 +351,22 @@ class UIXmlParser(object):
         
     def process_widget_QRadioButton(self, node, context):
         self.setWtType("WRadioButton", context)
-        self.defineVariable(context)
-        self.writeHeader('%s->setText("%s");'%(context['variableName'], node.property('text')))
+        created=False
+        if 'parentList' in context:
+            groupboxParent=rfind(lambda parent:parent['className'] == 'Wt::WGroupBox', context['parentList'])
+            if groupboxParent:
+                if 'buttonGroup' not in groupboxParent:
+                    emptyContext={}
+                    self.setWtType('WButtonGroup', emptyContext)
+                    groupboxParent['buttonGroup']="%sGroup"%groupboxParent['variableName']
+                    self.writeHeader("Wt::WButtonGroup *%s=new Wt::WButtonGroup();"%groupboxParent['buttonGroup'])
+                self.variables.append("%s *%s;"%(context['className'], context['variableName']))
+                self.writeHeader("%s=new %s(\"%s\", %s);"%(context['variableName'], context['className'], node.property('text'), groupboxParent['variableName']))
+                self.writeHeader("%s->addButton(%s);"%(groupboxParent['buttonGroup'], context['variableName']))
+                created=True
+        if not created:
+            self.defineVariable(context)
+            self.writeHeader('%s->setText("%s");'%(context['variableName'], node.property('text')))
         self.process(node, context)
     
     def process_widget_QCheckBox(self, node, context):
@@ -406,7 +437,8 @@ class UIXmlParser(object):
         
     def process_layout_items(self, node, context):
         for item in node.findAll(tag='item'):
-            localContext={};
+#            localContext={};
+            localContext=context.copy()
             localContext['variableName']=context['variableName']
             localContext['className']=context['className']
             if context['className'] == 'Wt::WGridLayout':
